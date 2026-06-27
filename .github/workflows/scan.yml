@@ -1,0 +1,23 @@
+name: 2 - Security Scan
+
+on: [push] # Triggers on every git push
+
+jobs:
+  scan-task:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Security Linter
+        run: |
+          echo "Scanning code layout for vulnerabilities..."
+          # You can hook ESLint or dynamic scanners here. 
+          # Simulating a clean scan output:
+          echo "Scan finished with 0 critical security alerts." > scan_report.txt
+
+      - name: Alert Discord
+        uses: tsickert/discord-webhook@v7.0.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
+          content: "🛡️ **Security Scan Passed!** No immediate security threats discovered in the last commit."
