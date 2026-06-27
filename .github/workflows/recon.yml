@@ -1,0 +1,31 @@
+name: 1 - Reconnaissance
+
+on:
+  workflow_dispatch:
+
+jobs:
+  recon-task:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Fetch Subdomains
+        run: |
+          curl -s https://crt.sh | jq '.[].name_value' | head -n 10 > subdomains.txt
+
+      # Direct Curl payload to Discord Webhook API
+      - name: Direct Alert to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d '{"content": "🔍 **Recon Completed!** Top targets gathered directly from GitHub cloud infrastructure."}' \
+               $WEBHOOK_URL
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: recon-subdomains
+          path: subdomains.txt
