@@ -1,0 +1,22 @@
+name: 3 - System Monitoring
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Automatically runs every 6 hours
+  workflow_dispatch: # Allows manual verification checks
+
+jobs:
+  monitor-task:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Target App
+        run: |
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" https://github.com)
+          echo "Target server responded with HTTP $HTTP_STATUS"
+          echo "STATUS=$HTTP_STATUS" >> $GITHUB_ENV
+
+      - name: Alert Discord
+        uses: tsickert/discord-webhook@v7.0.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
+          content: "📊 **Uptime Monitor Update:** Target site status is online (HTTP ${{ env.STATUS }})."
