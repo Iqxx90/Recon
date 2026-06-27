@@ -3,20 +3,90 @@ name: 3 - System Monitoring
 on:
   schedule:
     - cron: '0 */6 * * *' # Automatically runs every 6 hours
-  workflow_dispatch: # Allows manual verification checks
+  workflow_dispatch: # Allows you to trigger the monitoring check manually
 
 jobs:
-  monitor-task:
+  monitor-assets:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Target App
-        run: |
-          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" https://github.com)
-          echo "Target server responded with HTTP $HTTP_STATUS"
-          echo "STATUS=$HTTP_STATUS" >> $GITHUB_ENV
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Alert Discord
-        uses: tsickert/discord-webhook@v7.0.0
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+
+      # 1. Pull the live rockstargames.com subdomains list from the cache
+      - name: Load Live Asset History Baseline
+        uses: actions/cache/restore@v4
+        id: cache-history
         with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
-          content: "📊 **Uptime Monitor Update:** Target site status is online (HTTP ${{ env.STATUS }})."
+          path: old_assets.txt
+          key: asset-history-v1
+
+      # 2. Loop through all subdomains and inspect server health
+      - name: Run Uptime and Status Audit
+        id: check-health
+        run: |
+          echo "📡 Monitoring active web servers..."
+          
+          # Check if the cache file exists. If not, create a fallback baseline.
+          if [ ! -f old_assets.txt ]; then
+            echo "rockstargames.com" > old_assets.txt
+          fi
+
+          touch uptime_report.txt
+          DOWN_COUNT=0
+          TOTAL_COUNT=0
+
+          while IFS= read -r sub; do
+            if [ -n "$sub" ]; then
+              TOTAL_COUNT=$((TOTAL_COUNT + 1))
+              
+              # Probe via HTTPS first, follow redirects, timeout after 4 seconds
+              STATUS=$(curl -o /dev/null -s -w "%{http_code}" --connect-timeout 4 --location "https://$sub" || echo "FAILED")
+              
+              # Fallback to HTTP if HTTPS times out or drops connection
+              if [ "$STATUS" = "000" ] || [ "$STATUS" = "FAILED" ]; then
+                STATUS=$(curl -o /dev/null -s -w "%{http_code}" --connect-timeout 4 --location "http://$sub" || echo "DOWN")
+              fi
+
+              # Track broken hosts (any response code that is 5xx or fails entirely)
+              if [ "$STATUS" = "DOWN" ] || [[ "$STATUS" == 5* ]]; then
+                DOWN_COUNT=$((DOWN_COUNT + 1))
+                echo "❌ $sub -> [HTTP $STATUS] (CRITICAL)" >> uptime_report.txt
+              else
+                echo "✅ $sub -> [HTTP $STATUS]" >> uptime_report.txt
+              fi
+            fi
+          done < old_assets.txt
+
+          # Save summary counts to the workflow runtime environment variables
+          echo "TOTAL_HOSTS=$TOTAL_COUNT" >> $GITHUB_ENV
+          echo "DOWN_HOSTS=$DOWN_COUNT" >> $GITHUB_ENV
+
+      # 3. Deliver formatted status metrics report directly to Discord
+      - name: Dispatch Status Report to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          TOTAL=${{ env.TOTAL_HOSTS }}
+          DOWN=${{ env.DOWN_HOSTS }}
+          REPORT=$(cat uptime_report.txt | tr '\n' '\\n')
+
+          # Style alert color based on whether systems are currently crashing
+          if [ "$DOWN" -gt 0 ]; then
+            HEADER="🚨 **System Monitoring Alert: Outages Detected!**\n⚠️ **$DOWN / $TOTAL** monitored subdomains are currently failing requests."
+          else
+            HEADER="📊 **Routine System Monitoring Status Report**\n💚 All **$TOTAL** subdomains are responding normally."
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg c "$HEADER\n\n\`\`\`text\n$REPORT\n\`\`\`" \
+            '{content: $c}')
+
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d "$PAYLOAD" \
+               $WEBHOOK_URL
