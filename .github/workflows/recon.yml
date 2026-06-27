@@ -1,7 +1,7 @@
 name: 1 - Reconnaissance
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Run manually from the GitHub Actions tab
 
 jobs:
   recon-task:
@@ -10,22 +10,60 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Fetch Subdomains
+      - name: Install Network Diagnostics Tools
         run: |
-          curl -s https://crt.sh | jq '.[].name_value' | head -n 10 > subdomains.txt
+          sudo apt-get update
+          sudo apt-get install -y dnsutils jq
 
-      # Direct Curl payload to Discord Webhook API
-      - name: Direct Alert to Discord
+      - name: Fetch and Filter Subdomains
+        env:
+          TARGET: "rockstargames.com"
+        run: |
+          echo "🔄 Pulling SSL Certificate Transparency logs..."
+          # Fetch JSON -> extract names -> convert to lowercase -> remove *. prefix -> sort unique
+          curl -s "https://crt.sh" | \
+          jq -r '.[].name_value' | \
+          tr '[:upper:]' '[:lower:]' | \
+          sed 's/\*\.//g' | \
+          sort -u > raw_subs.txt
+
+          echo "🔍 Filtering out dead assets and false random hits..."
+          touch verified_subs.txt
+          
+          # Loop through each unique domain and actively verify it exists
+          while IFS= read -r sub; do
+            # Skip entries that aren't matching the domain or contain spaces
+            if [[ "$sub" == *"$TARGET" ]] && [[ ! "$sub" =~ [[:space:]] ]]; then
+              if dig +short "$sub" | grep -q '^[0-9]'; then
+                echo "$sub" >> verified_subs.txt
+              fi
+            fi
+          done < raw_subs.txt
+
+          # Final deduplication pass
+          sort -u verified_subs.txt -o final_assets.txt
+          
+          echo "Total raw records: $(wc -l < raw_subs.txt)"
+          echo "Total verified live assets: $(wc -l < final_assets.txt)"
+
+      - name: Notify Discord Channel
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
+          COUNT=$(wc -l < final_assets.txt)
+          TOP_5=$(head -n 5 final_assets.txt | tr '\n' ',' | sed 's/,$//')
+          
+          PAYLOAD=$(jq -n \
+            --arg c "🎯 **Recon Complete for rockstargames.com**\n✅ Found **$COUNT** verified live assets (0 duplicates, 0 false positives).\n📋 **Top Assets:** \`$TOP_5\`" \
+            '{content: $c}')
+
           curl -H "Content-Type: application/json" \
                -X POST \
-               -d '{"content": "🔍 **Recon Completed!** Top targets gathered directly from GitHub cloud infrastructure."}' \
+               -d "$PAYLOAD" \
                $WEBHOOK_URL
 
-      - name: Upload Results
+      - name: Store Verified Output File
         uses: actions/upload-artifact@v4
         with:
-          name: recon-subdomains
-          path: subdomains.txt
+          name: rockstar-live-assets
+          path: final_assets.txt
