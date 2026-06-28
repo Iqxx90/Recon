@@ -38,15 +38,14 @@ jobs:
         run: |
           unzip rockstar-live-assets.zip
           echo "Targets ready for vulnerability scanning:"
-          cat final_assets.txt
+          cat current_assets.txt
 
       - name: Run Nuclei Vulnerability Scan
         id: nuclei_scan
         uses: projectdiscovery/nuclei-action@v3
         with:
           version: latest
-          args: -l final_assets.txt -t cves/,exposures/,misconfiguration/,vulnerabilities/ -o nuclei_results.txt
-
+          args: -l current_assets.txt -t cves/,exposures/,misconfiguration/,vulnerabilities/ -o nuclei_results.txt
       - name: Report Flaws to Discord
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
