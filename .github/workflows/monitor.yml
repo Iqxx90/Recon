@@ -1,58 +1,50 @@
 name: 3 - System Monitoring
-
 on:
   schedule:
-    - cron: '0 */6 * * *' # Automatically runs every 6 hours
-  workflow_dispatch: # Allows you to trigger the monitoring check manually
-
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 jobs:
   monitor-assets:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y jq curl
 
-      # 1. Pull the live rockstargames.com subdomains list from the cache
       - name: Load Live Asset History Baseline
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         id: cache-history
         with:
           path: old_assets.txt
-          key: asset-history-v1
+          key: asset-history-${{ github.run_id }}
+          restore-keys: |
+            asset-history-
 
-      # 2. Loop through all subdomains and inspect server health
       - name: Run Uptime and Status Audit
         id: check-health
         run: |
           echo "📡 Monitoring active web servers..."
-          
-          # Check if the cache file exists. If not, create a fallback baseline.
+
           if [ ! -f old_assets.txt ]; then
             echo "rockstargames.com" > old_assets.txt
           fi
-
           touch uptime_report.txt
           DOWN_COUNT=0
           TOTAL_COUNT=0
-
           while IFS= read -r sub; do
             if [ -n "$sub" ]; then
               TOTAL_COUNT=$((TOTAL_COUNT + 1))
-              
-              # Probe via HTTPS first, follow redirects, timeout after 4 seconds
+
               STATUS=$(curl -o /dev/null -s -w "%{http_code}" --connect-timeout 4 --location "https://$sub" || echo "FAILED")
-              
-              # Fallback to HTTP if HTTPS times out or drops connection
+
               if [ "$STATUS" = "000" ] || [ "$STATUS" = "FAILED" ]; then
                 STATUS=$(curl -o /dev/null -s -w "%{http_code}" --connect-timeout 4 --location "http://$sub" || echo "DOWN")
               fi
 
-              # Track broken hosts (any response code that is 5xx or fails entirely)
               if [ "$STATUS" = "DOWN" ] || [[ "$STATUS" == 5* ]]; then
                 DOWN_COUNT=$((DOWN_COUNT + 1))
                 echo "❌ $sub -> [HTTP $STATUS] (CRITICAL)" >> uptime_report.txt
@@ -62,11 +54,9 @@ jobs:
             fi
           done < old_assets.txt
 
-          # Save summary counts to the workflow runtime environment variables
           echo "TOTAL_HOSTS=$TOTAL_COUNT" >> $GITHUB_ENV
           echo "DOWN_HOSTS=$DOWN_COUNT" >> $GITHUB_ENV
 
-      # 3. Deliver formatted status metrics report directly to Discord
       - name: Dispatch Status Report to Discord
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
@@ -75,7 +65,6 @@ jobs:
           DOWN=${{ env.DOWN_HOSTS }}
           REPORT=$(cat uptime_report.txt | tr '\n' '\\n')
 
-          # Style alert color based on whether systems are currently crashing
           if [ "$DOWN" -gt 0 ]; then
             HEADER="🚨 **System Monitoring Alert: Outages Detected!**\n⚠️ **$DOWN / $TOTAL** monitored subdomains are currently failing requests."
           else
