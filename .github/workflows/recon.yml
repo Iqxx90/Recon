@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Network Diagnostics Tools
         run: |
@@ -17,11 +17,13 @@ jobs:
 
       # 1. استعادة تاريخ الفحص السابق من ذاكرة جيت هاب السحابية
       - name: Restore Previous Asset History
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         id: cache-history
         with:
           path: old_assets.txt
-          key: asset-history-v1
+          key: asset-history-${{ github.run_id }}
+          restore-keys: |
+            asset-history-
 
       # 2. سحب البيانات من سجلات الشهادات وفلترة النطاقات والتحقق من الـ DNS
       - name: Fetch and Filter Subdomains
@@ -29,7 +31,8 @@ jobs:
           TARGET: "rockstargames.com"
         run: |
           echo "🔄 Pulling SSL Certificate Transparency logs..."
-          curl -s "https://crt.sh" | \
+          # تم إصلاح الرابط هنا ليمرر النطاق المستهدف بشكل صحيح إلى crt.sh
+          curl -s "https://crt.sh{TARGET}&output=json" | \
           jq -r '.[].name_value' | \
           tr '[:upper:]' '[:lower:]' | \
           sed 's/\*\.//g' | \
@@ -96,15 +99,15 @@ jobs:
         run: cp current_assets.txt old_assets.txt
 
       - name: Save Updated Cache to GitHub Cloud
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         if: always()
         with:
           path: old_assets.txt
-          key: asset-history-v1
+          key: asset-history-${{ github.run_id }}
 
       # 7. حفظ ملف النتائج كـ Artifact لتتمكن أداة Nuclei في الملف الثاني من تحميله تلقائياً
       - name: Upload Verified Assets Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: rockstar-live-assets
           path: current_assets.txt
