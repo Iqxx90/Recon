@@ -1,7 +1,7 @@
 name: 1 - Reconnaissance
 
 on:
-  workflow_dispatch: # تشغيل يدوي من موقع جيت هاب
+  workflow_dispatch:
 
 jobs:
   recon-task:
@@ -15,7 +15,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y dnsutils jq curl
 
-      # 1. استعادة تاريخ الفحص السابق من ذاكرة جيت هاب السحابية
       - name: Restore Previous Asset History
         uses: actions/cache/restore@v5
         id: cache-history
@@ -25,14 +24,12 @@ jobs:
           restore-keys: |
             asset-history-
 
-      # 2. سحب البيانات من سجلات الشهادات وفلترة النطاقات والتحقق من الـ DNS
       - name: Fetch and Filter Subdomains
         env:
           TARGET: "rockstargames.com"
         run: |
           echo "🔄 Pulling SSL Certificate Transparency logs..."
-          # تم إصلاح الرابط هنا ليمرر النطاق المستهدف بشكل صحيح إلى crt.sh
-          curl -s "https://crt.sh{TARGET}&output=json" | \
+          curl -s "https://crt.sh/?q=${TARGET}&output=json" | \
           jq -r '.[].name_value' | \
           tr '[:upper:]' '[:lower:]' | \
           sed 's/\*\.//g' | \
@@ -50,7 +47,6 @@ jobs:
 
           sort -u verified_subs.txt -o current_assets.txt
 
-      # 3. مقارنة الفحص الحالي بالسابق واستخراج النطاقات الجديدة فقط
       - name: Detect New Assets Only
         run: |
           touch old_assets.txt
@@ -59,24 +55,22 @@ jobs:
           echo "NEW_ASSETS_FOUND=$NEW_COUNT" >> $GITHUB_ENV
           echo "Found $NEW_COUNT brand new subdomains."
 
-      # 4. فحص خدمات الويب (HTTP/HTTPS Status) للنطاقات الجديدة المكتشفة
       - name: Analyze HTTP Status Codes
         if: env.NEW_ASSETS_FOUND > 0
         run: |
           echo "📡 Scanning HTTP/HTTPS endpoints for new targets..."
           touch live_report.txt
-          
+
           head -n 10 new_assets.txt | while IFS= read -r sub; do
             STATUS=$(curl -o /dev/null -s -w "%{http_code}" --connect-timeout 4 --location "https://$sub" || echo "FAILED")
-            
+
             if [ "$STATUS" = "000" ] || [ "$STATUS" = "FAILED" ]; then
               STATUS=$(curl -o /dev/null -s -w "%{http_code}" --connect-timeout 4 --location "http://$sub" || echo "DOWN")
             fi
-            
+
             echo "• $sub [$STATUS]" >> live_report.txt
           done
 
-      # 5. إرسال التنبيه إلى ديسكورد في حال وجود نطاقات جديدة فقط
       - name: Notify Discord Channel
         if: env.NEW_ASSETS_FOUND > 0
         env:
@@ -84,7 +78,7 @@ jobs:
         run: |
           COUNT=${{ env.NEW_ASSETS_FOUND }}
           LIST=$(cat live_report.txt | tr '\n' '\\n')
-          
+
           PAYLOAD=$(jq -n \
             --arg c "⚠️ **New Infrastructure Detected for rockstargames.com!**\n🔥 Found **$COUNT** brand-new live subdomains.\n\n📋 **HTTP Service Status:**\n\`\`\`text\n$LIST\n\`\`\`" \
             '{content: $c}')
@@ -94,7 +88,6 @@ jobs:
                -d "$PAYLOAD" \
                $WEBHOOK_URL
 
-      # 6. تحديث وحفظ ملف الذاكرة السحابية للفحص القادم
       - name: Update Asset History Cache File
         run: cp current_assets.txt old_assets.txt
 
@@ -105,9 +98,8 @@ jobs:
           path: old_assets.txt
           key: asset-history-${{ github.run_id }}
 
-      # 7. حفظ ملف النتائج كـ Artifact لتتمكن أداة Nuclei في الملف الثاني من تحميله تلقائياً
       - name: Upload Verified Assets Artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: rockstar-live-assets
           path: current_assets.txt
