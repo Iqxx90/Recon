@@ -53,9 +53,8 @@ jobs:
         run: |
           if [ -s nuclei_results.txt ]; then
             VULNS=$(head -n 15 nuclei_results.txt | tr '\n' '\\n')
-            PAYLOAD=$(jq -n --arg c "🚨 **Vulnerability Scan Results for rockstargames.com**\n❌ **Critical Issues Found!**\n\`\`\`text\n$VULNS\n\`\`\`" '{content: $c}')
-          else
-            PAYLOAD=$(jq -n --arg c "🛡️ **Vulnerability Scan Results for rockstargames.com**\n✅ Scan finished. No critical vulnerabilities detected on verified targets." '{content: $c}')
+            PAYLOAD=$(jq -n --arg c "🚨 **Vulnerability Scan Results for doordash.com**\n❌ **Critical Issues Found!**\n\`\`\`text\n$VULNS\n\`\`\`" '{content: $c}')          else
+            PAYLOAD=$(jq -n --arg c "🛡️ **Vulnerability Scan Results for doordash.com**\n✅ Scan finished. No critical vulnerabilities detected on verified targets." '{content: $c}')
           fi
           curl -H "Content-Type: application/json" \
                -X POST \
