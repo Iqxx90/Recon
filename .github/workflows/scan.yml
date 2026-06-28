@@ -8,7 +8,6 @@ jobs:
   nuclei-scan:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
@@ -42,10 +41,12 @@ jobs:
 
       - name: Run Nuclei Vulnerability Scan
         id: nuclei_scan
+        continue-on-error: true
         uses: projectdiscovery/nuclei-action@v3
         with:
           version: latest
-          args: -l current_assets.txt -t cves/,exposures/,misconfiguration/,vulnerabilities/ -o nuclei_results.txt
+          args: -l current_assets.txt -t cves/,exposures/,misconfiguration/,vulnerabilities/ -o nuclei_results.txt -rl 50 -c 10 -timeout 10
+
       - name: Report Flaws to Discord
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
