@@ -22,7 +22,7 @@ jobs:
                run_id: context.payload.workflow_run.id,
             });
             let matchArtifact = allArtifacts.data.artifacts.filter((artifact) => {
-              return artifact.name == "rockstar-live-assets"
+              return artifact.name == "Crypto-live-assets"
             })[0];
             let download = await github.rest.actions.downloadArtifact({
                owner: context.repo.owner,
@@ -31,7 +31,7 @@ jobs:
                archive_format: 'zip',
             });
             let fs = require('fs');
-            fs.writeFileSync('${{ github.workspace }}/rockstar-live-assets.zip', Buffer.from(download.data));
+            fs.writeFileSync('${{ github.workspace }}/Crypto-live-assets.zip', Buffer.from(download.data));
 
       - name: Unzip Target File
         run: |
@@ -53,8 +53,8 @@ jobs:
         run: |
           if [ -s nuclei_results.txt ]; then
             VULNS=$(head -n 15 nuclei_results.txt | tr '\n' '\\n')
-            PAYLOAD=$(jq -n --arg c "🚨 **Vulnerability Scan Results for doordash.com**\n❌ **Critical Issues Found!**\n\`\`\`text\n$VULNS\n\`\`\`" '{content: $c}')          else
-            PAYLOAD=$(jq -n --arg c "🛡️ **Vulnerability Scan Results for doordash.com**\n✅ Scan finished. No critical vulnerabilities detected on verified targets." '{content: $c}')
+            PAYLOAD=$(jq -n --arg c "🚨 **Vulnerability Scan Results for Crypto.com**\n❌ **Critical Issues Found!**\n\`\`\`text\n$VULNS\n\`\`\`" '{content: $c}')          else
+            PAYLOAD=$(jq -n --arg c "🛡️ **Vulnerability Scan Results for Crypto.com**\n✅ Scan finished. No critical vulnerabilities detected on verified targets." '{content: $c}')
           fi
           curl -H "Content-Type: application/json" \
                -X POST \
