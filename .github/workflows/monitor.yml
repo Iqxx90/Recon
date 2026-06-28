@@ -68,9 +68,8 @@ jobs:
           if [ "$DOWN" -gt 0 ]; then
             HEADER="🚨 **System Monitoring Alert: Outages Detected!**\n⚠️ **$DOWN / $TOTAL** monitored subdomains are currently failing requests."
           else
-            HEADER="📊 **Routine System Monitoring Status Report**\n💚 All **$TOTAL** subdomains are responding normally."
-          fi
-
+            HEADER="📊 **Routine System Monitoring Status Report**\n💚 All **$TOTAL** subdomains are responding normally."          
+            fi
           PAYLOAD=$(jq -n \
             --arg c "$HEADER\n\n\`\`\`text\n$REPORT\n\`\`\`" \
             '{content: $c}')
