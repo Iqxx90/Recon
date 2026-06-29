@@ -26,7 +26,7 @@ jobs:
 
       - name: Fetch and Filter Subdomains
         env:
-          TARGET: "Crypto.com"
+          TARGET: "sony.com"
         run: |
           echo "🔄 Pulling SSL Certificate Transparency logs..."
           curl -s "https://crt.sh/?q=${TARGET}&output=json" | \
