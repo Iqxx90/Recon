@@ -30,7 +30,7 @@ jobs:
           echo "📡 Monitoring active web servers..."
 
           if [ ! -f old_assets.txt ]; then
-            echo "Crypto.com" > old_assets.txt
+            echo "sony.com" > old_assets.txt
           fi
           touch uptime_report.txt
           DOWN_COUNT=0
